@@ -1,32 +1,60 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+	SENDGRID_API_KEY: string;
+	SENDGRID_FROM_EMAIL: string;
 }
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+		const apiKey = env.SENDGRID_API_KEY;
+		const fromEmail = env.SENDGRID_FROM_EMAIL;
+		const requestBody = (await request.json()) as { toEmail: string; subject: string; html: string };
+		const toEmail = requestBody.toEmail;
+		const subject = requestBody.subject;
+		const html = requestBody.html;
+
+		console.log(`Sending email to ${toEmail} with subject ${subject}`);
+
+		await sendEmail(apiKey, fromEmail, toEmail, subject, html);
+
+		return new Response('OK', { status: 200 });
 	},
+};
+
+const sendEmail = async (apiKey: string, fromEmail: string, toEmail: string, subject: string, html: string) => {
+	const url = 'https://api.sendgrid.com/v3/mail/send';
+	const data = {
+		personalizations: [
+			{
+				to: [
+					{
+						email: toEmail,
+					},
+				],
+			},
+		],
+		from: {
+			email: fromEmail,
+		},
+		subject: subject,
+		content: [
+			{
+				type: 'text/html',
+				value: html,
+			},
+		],
+	};
+
+	const headers = {
+		Authorization: `Bearer ${apiKey}`,
+		'Content-Type': 'application/json',
+	};
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: headers,
+		body: JSON.stringify(data),
+	});
+	if (!response.ok) {
+		throw new Error(`Failed to send email: ${response.status} ${response.statusText}`);
+	}
 };
